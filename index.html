@@ -1,1 +1,277 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLASS VOTE | IT CLASS</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0f172a;
+  color: white;
+}
+
+header {
+  background: #1e293b;
+  padding: 25px 15px;
+  text-align: center;
+  border-bottom: 2px solid #38bdf8;
+}
+
+header h1 {
+  color: #38bdf8;
+  margin: 5px;
+}
+
+header p {
+  color: #cbd5e1;
+}
+
+.container {
+  max-width: 600px;
+  margin: 25px auto;
+  padding: 15px;
+}
+
+.card {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 15px;
+  margin-bottom: 18px;
+  border: 1px solid #334155;
+}
+
+.candidate {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.candidate h3 {
+  margin: 5px 0;
+}
+
+button {
+  background: #0284c7;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+button:hover {
+  background: #0369a1;
+}
+
+button:disabled {
+  background: #475569;
+  cursor: not-allowed;
+}
+
+.bar {
+  background: #334155;
+  height: 12px;
+  border-radius: 20px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.fill {
+  background: #38bdf8;
+  height: 100%;
+  width: 0%;
+  transition: width .5s;
+}
+
+.total {
+  color: #38bdf8;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+footer {
+  text-align: center;
+  color: #94a3b8;
+  padding: 25px;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>CLASS VOTE</h1>
+  <p>IT CLASS | Student Election 2026</p>
+  <p>Anonymous • Fair • Transparent</p>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2>🗳️ Cast Your Vote</h2>
+    <p>Choose your preferred candidate.</p>
+    <p id="status">Connecting to voting system...</p>
+  </div>
+
+  <div id="candidates"></div>
+
+  <div class="card">
+    <h2>📊 Live Results</h2>
+    <p>Total Votes</p>
+    <div class="total" id="total">0</div>
+    <div id="results"></div>
+  </div>
+
+</div>
+
+<footer>
+  CLASS VOTE © 2026<br>
+  Powered by IT CLASS
+</footer>
+
+<script type="module">
+import { initializeApp } from
+"https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+
+import {
+  getDatabase, ref, onValue, runTransaction
+} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
+
+import {
+  getAuth, signInAnonymously
+} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+
+// REPLACE WITH YOUR FIREBASE CONFIG
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "YOUR_DATABASE_URL",
+  projectId: "YOUR_PROJECT_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+const candidates = [
+  {id: "candidate1", name: "Candidate 1"},
+  {id: "candidate2", name: "Candidate 2"},
+  {id: "candidate3", name: "Candidate 3"},
+  {id: "candidate4", name: "Candidate 4"}
+];
+
+const votesRef = ref(db, "votes");
+let currentUser = null;
+
+async function start() {
+  try {
+    const result = await signInAnonymously(auth);
+    currentUser = result.user;
+
+    onValue(votesRef, snapshot => {
+      const votes = snapshot.val() || {};
+      showResults(votes);
+    });
+
+    document.getElementById("status").textContent =
+      "Voting system is ready.";
+
+    showCandidates();
+  } catch (error) {
+    document.getElementById("status").textContent =
+      "Connection error. Check Firebase settings.";
+  }
+}
+
+function showCandidates() {
+  const area = document.getElementById("candidates");
+
+  area.innerHTML = candidates.map(c => `
+    <div class="card">
+      <div class="candidate">
+        <div>
+          <h3>${c.name}</h3>
+          <small>IT CLASS Candidate</small>
+        </div>
+        <button id="btn-${c.id}"
+          onclick="castVote('${c.id}')">
+          VOTE
+        </button>
+      </div>
+    </div>
+  `).join("");
+}
+
+window.castVote = async function(candidateId) {
+  if (!currentUser) return;
+
+  const btn = document.getElementById("btn-" + candidateId);
+  btn.disabled = true;
+
+  try {
+    const myVote = ref(db, "votes/" + currentUser.uid);
+
+    const result = await runTransaction(myVote, current => {
+      if (current !== null) return;
+      return candidateId;
+    });
+
+    if (result.committed) {
+      alert("Your vote has been recorded!");
+    } else {
+      alert("You have already voted!");
+    }
+  } catch (error) {
+    alert("Voting failed. Please try again.");
+  }
+
+  btn.disabled = false;
+};
+
+function showResults(votes) {
+  const counts = {};
+  candidates.forEach(c => counts[c.id] = 0);
+
+  Object.values(votes).forEach(vote => {
+    if (counts[vote] !== undefined) counts[vote]++;
+  });
+
+  const total = Object.values(counts)
+    .reduce((a, b) => a + b, 0);
+
+  document.getElementById("total").textContent = total;
+
+  document.getElementById("results").innerHTML =
+    candidates.map(c => {
+      const count = counts[c.id];
+      const percent = total ? (count / total * 100) : 0;
+
+      return `
+        <div style="margin-top:20px">
+          <strong>${c.name}</strong>
+          <span style="float:right">${count} votes (${percent.toFixed(1)}%)</span>
+          <div class="bar">
+            <div class="fill" style="width:${percent}%"></div>
+          </div>
+        </div>
+      `;
+    }).join("");
+}
+
+start();
+</script>
+
+</body>
+</html>
+
